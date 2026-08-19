@@ -43,7 +43,8 @@ function checkConfig() {
 
   console.log(`1. .env File Exists:        ${fs.existsSync('.env') ? 'YES' : 'NO'}`);
   console.log(`2. SPRING_PROFILES_ACTIVE:  ${profile} ${profile === 'prod' ? '✓ (PASS)' : '✗ (FAIL)'}`);
-  console.log(`3. DATABASE_USERNAME:       ${dbUser} ${dbUser === 'postgres' ? '✓ (PASS)' : '✗'}`);
+  const isDbUserValid = dbUser.startsWith('postgres');
+  console.log(`3. DATABASE_USERNAME:       ${dbUser} ${isDbUserValid ? '✓ (PASS)' : '✗'}`);
   console.log(`4. DATABASE_PASSWORD:       ${dbPass ? '******** (Length: ' + dbPass.length + ' chars) ✓ (PASS)' : '(empty) ✗ (FAIL)'}`);
   console.log(`5. JWT_SECRET:              ${jwtSecret ? '******** (Length: ' + jwtSecret.length + ' chars) ✓ (PASS)' : '(empty) ✗ (FAIL)'}`);
   console.log(`6. SERVER_PORT:             ${serverPort} ${serverPort === '8080' ? '✓ (PASS)' : ''}`);

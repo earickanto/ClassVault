@@ -112,16 +112,33 @@ public class LeaderboardService {
     public List<LeaderboardEntry> getLeaderboard() {
         List<Student> students = studentRepository.findAll();
         int totalStudents = students.size();
+        List<com.classvault.api.entity.Project> allProjects = projectRepository.findAll();
+
+        // Group project statistics by studentId in memory for ultra-fast response
+        java.util.Map<Long, Long> projectCounts = allProjects.stream()
+                .filter(p -> p.getOwnerStudent() != null)
+                .collect(Collectors.groupingBy(p -> p.getOwnerStudent().getId(), Collectors.counting()));
+
+        java.util.Map<Long, Long> likesCounts = allProjects.stream()
+                .filter(p -> p.getOwnerStudent() != null)
+                .collect(Collectors.groupingBy(p -> p.getOwnerStudent().getId(),
+                        Collectors.summingLong(p -> p.getLikesCount() != null ? p.getLikesCount() : 0L)));
+
+        java.util.Map<Long, Long> downloadsCounts = allProjects.stream()
+                .filter(p -> p.getOwnerStudent() != null)
+                .collect(Collectors.groupingBy(p -> p.getOwnerStudent().getId(),
+                        Collectors.summingLong(p -> p.getDownloadsCount() != null ? p.getDownloadsCount() : 0L)));
+
+        java.util.Map<Long, Long> viewsCounts = allProjects.stream()
+                .filter(p -> p.getOwnerStudent() != null)
+                .collect(Collectors.groupingBy(p -> p.getOwnerStudent().getId(),
+                        Collectors.summingLong(p -> p.getViewsCount() != null ? p.getViewsCount() : 0L)));
 
         List<LeaderboardEntry> entries = students.stream().map(student -> {
-            long projects = projectRepository.countByOwnerStudentId(student.getId());
-            Long likes = projectRepository.sumLikesByOwnerStudentId(student.getId());
-            Long downloads = projectRepository.sumDownloadsByOwnerStudentId(student.getId());
-            Long views = projectRepository.sumViewsByOwnerStudentId(student.getId());
-
-            long totalLikes = likes != null ? likes : 0L;
-            long totalDownloads = downloads != null ? downloads : 0L;
-            long totalViews = views != null ? views : 0L;
+            long projects = projectCounts.getOrDefault(student.getId(), 0L);
+            long totalLikes = likesCounts.getOrDefault(student.getId(), 0L);
+            long totalDownloads = downloadsCounts.getOrDefault(student.getId(), 0L);
+            long totalViews = viewsCounts.getOrDefault(student.getId(), 0L);
 
             double score = (projects * WEIGHT_PROJECT) +
                            (totalLikes * WEIGHT_LIKE) +

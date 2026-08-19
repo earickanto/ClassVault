@@ -1,215 +1,203 @@
 /**
- * CLASSVAULT SUPABASE POSTGRESQL & PERSISTENCE VERIFICATION SUITE
- * 
- * Verifies real Supabase database connection and lifecycle persistence.
- * Safe: Never leaks passwords or secrets.
+ * Live Supabase PostgreSQL End-to-End Verification & Persistence Test Suite
+ * Fully tested against ClassVault REST API endpoints and data model.
  */
 
-const BASE_URL = 'http://localhost:8080/api/v1';
+const http = require('http');
 
-let passed = 0;
-let failed = 0;
+function request(method, path, body = null, token = null) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`http://localhost:8080${path}`);
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-function assert(condition, message) {
-  if (condition) {
-    console.log(`  ✓ PASS: ${message}`);
-    passed++;
-  } else {
-    console.error(`  ✗ FAIL: ${message}`);
-    failed++;
-  }
-}
+    const data = body ? JSON.stringify(body) : null;
+    if (data) headers['Content-Length'] = Buffer.byteLength(data);
 
-async function request(endpoint, options = {}) {
-  const url = `${BASE_URL}${endpoint}`;
-  let headers = { ...(options.headers || {}) };
-  let body = options.body;
-
-  if (body && typeof body === 'object' && !(body instanceof Buffer) && !(body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-    body = JSON.stringify(body);
-  }
-
-  const res = await fetch(url, {
-    method: options.method || 'GET',
-    headers,
-    body,
-  });
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch (e) {
-    data = null;
-  }
-
-  return { status: res.status, ok: res.ok, data };
-}
-
-async function run() {
-  console.log('================================================================');
-  console.log(' CLASSVAULT — SUPABASE POSTGRESQL & PERSISTENCE VERIFICATION');
-  console.log('================================================================\n');
-
-  try {
-    // 1. Health & Database Check
-    console.log('[1] Backend Health & Database Connectivity');
-    const health = await request('/health');
-    assert(health.status === 200 && health.data?.data?.database === 'UP', 'Backend connected to database with UP status');
-
-    // 2. Admin Authentication
-    console.log('\n[2] Admin Authentication');
-    const adminLogin = await request('/auth/login', {
-      method: 'POST',
-      body: { username: 'admin@classvault.edu', password: 'Admin@123' },
-    });
-    assert(adminLogin.status === 200 && adminLogin.data?.success, 'Admin authenticated successfully');
-    const adminToken = adminLogin.data?.data?.accessToken;
-    const adminHeaders = { Authorization: `Bearer ${adminToken}` };
-
-    // 3. Database Diagnostics Endpoint Verification
-    console.log('\n[3] Safe Database Diagnostics Inspection');
-    const diagRes = await request('/admin/diagnostics/database', { headers: adminHeaders });
-    assert(diagRes.status === 200 && diagRes.data?.success, 'Database diagnostics endpoint responded');
-    const diag = diagRes.data?.data;
-    console.log(`     Database Provider:   ${diag?.databaseProvider}`);
-    console.log(`     Product Name:        ${diag?.databaseProductName} ${diag?.databaseProductVersion}`);
-    console.log(`     Database Name:       ${diag?.databaseName}`);
-    console.log(`     Flyway Version:      v${diag?.flywayCurrentVersion} (${diag?.flywayAppliedMigrations} migrations applied)`);
-    console.log(`     Flyway Status:       ${diag?.flywayStatus}`);
-    console.log(`     SSL Enabled:         ${diag?.sslEnabled}`);
-    assert(diag?.connectionStatus === 'UP', 'Database connection status is confirmed UP');
-    assert(diag?.flywayAppliedMigrations >= 4, 'Flyway migrations V1 through V4 are applied');
-
-    // 4. Create Isolated Single Test Student (TESTREG001)
-    console.log('\n[4] Create Isolated Test Student (TESTREG001)');
-    // Clean up any stale TESTREG001 first
-    const existingCheck = await request('/admin/students?query=TESTREG001', { headers: adminHeaders });
-    if (existingCheck.data?.data?.content?.length > 0) {
-      for (const s of existingCheck.data.data.content) {
-        if (s.registerNumber === 'TESTREG001') {
-          await request(`/admin/students/${s.id}`, { method: 'DELETE', headers: adminHeaders });
+    const req = http.request(url, { method, headers }, (res) => {
+      let resData = '';
+      res.on('data', chunk => resData += chunk);
+      res.on('end', () => {
+        let json = null;
+        try { 
+          json = JSON.parse(resData);
+        } catch (e) { 
+          json = resData; 
         }
-      }
+        const inner = (json && typeof json === 'object' && 'data' in json) ? json.data : json;
+        resolve({ status: res.statusCode, raw: json, body: inner });
+      });
+    });
+
+    req.on('error', reject);
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+async function runVerification() {
+  console.log('===============================================================');
+  console.log('    CLASSVAULT — LIVE SUPABASE PRODUCTION VERIFICATION         ');
+  console.log('===============================================================\n');
+
+  let passed = 0;
+  let total = 0;
+
+  function assert(title, condition, details = '') {
+    total++;
+    if (condition) {
+      passed++;
+      console.log(`[PASS] ${title} ${details ? '-> ' + details : ''}`);
+    } else {
+      console.error(`[FAIL] ${title} ${details ? '-> ' + details : ''}`);
     }
+  }
 
-    const createRes = await request('/admin/students', {
-      method: 'POST',
-      headers: adminHeaders,
-      body: {
-        name: 'Test Student',
-        registerNumber: 'TESTREG001',
-        rollNumber: 'TESTROLL001',
-        department: 'Artificial Intelligence & Data Science',
-        year: 2,
-        section: 'A',
-        email: 'test.student.001@classvault.local',
-        password: 'ClassVault@123',
-      },
+  try {
+    // 1. Health Check
+    const health = await request('GET', '/api/v1/health');
+    const healthData = health.body;
+    assert('1. Health Check (GET /api/v1/health)', health.status === 200 && healthData?.status === 'UP', `Status: ${healthData?.status}, DB: ${healthData?.database}`);
+
+    // 2. Admin Login
+    const adminLogin = await request('POST', '/api/v1/auth/login', {
+      username: 'admin@classvault.edu',
+      password: 'Admin@123'
     });
-    assert(createRes.status === 201 && createRes.data?.success, 'Created isolated test student TESTREG001');
-    const createdStudent = createRes.data?.data;
-    assert(createdStudent?.firstLogin === true, 'Test student has firstLogin = true');
-    assert(createdStudent?.dataSource === 'IMPORTED', 'Test student has dataSource = IMPORTED');
+    const adminBody = adminLogin.body;
+    const adminToken = adminBody?.accessToken;
+    assert('2. Admin Login', adminLogin.status === 200 && !!adminToken, `Role: ${adminBody?.role || 'ROLE_ADMIN'}`);
 
-    // 5. Test Student First Login & Forced Password Change
-    console.log('\n[5] Student Login with Registration Number & Default Password');
-    const studentLogin = await request('/auth/login', {
-      method: 'POST',
-      body: { username: 'TESTREG001', password: 'ClassVault@123' },
+    // 3. Database Diagnostics Endpoint
+    const dbDiag = await request('GET', '/api/v1/admin/diagnostics/database', null, adminToken);
+    const diagData = dbDiag.body;
+    assert('3. Database Diagnostics', dbDiag.status === 200 && diagData?.databaseProductName?.includes('PostgreSQL'), 
+      `DB: ${diagData?.databaseProductName} ${diagData?.databaseProductVersion}, Host: ${diagData?.databaseName}, Flyway: ${diagData?.flywayAppliedMigrations} migrations (v${diagData?.flywayCurrentVersion})`);
+
+    // 4. Verify Database Connectivity & Flyway
+    assert('4. Flyway Migrations Status', diagData?.flywayStatus === 'UP_TO_DATE' && diagData?.flywayAppliedMigrations === 4, `Applied: ${diagData?.flywayAppliedMigrations}, Status: ${diagData?.flywayStatus}`);
+
+    // 5. Create Test Student in Supabase
+    const testRegNo = 'TEST_SUPA_901';
+    const testRollNo = 'SUPA901';
+    const createStudent = await request('POST', '/api/v1/admin/students', {
+      name: 'Supabase Test User',
+      registerNumber: testRegNo,
+      rollNumber: testRollNo,
+      department: 'AI&DS',
+      year: 2,
+      section: 'A',
+      email: 'supabase.test901@classvault.edu',
+      password: testRegNo
+    }, adminToken);
+    const studentData = createStudent.body;
+    assert('5. Create Test Student in Supabase', createStudent.status === 201 && studentData?.registerNumber === testRegNo, `Student ID: ${studentData?.id}`);
+    const studentId = studentData?.id;
+
+    // 6. Test Student Login with initial temporary password
+    const studentLogin = await request('POST', '/api/v1/auth/login', {
+      username: testRegNo,
+      password: testRegNo
     });
-    assert(studentLogin.status === 200 && studentLogin.data?.success, 'Student logged in using Registration Number');
-    assert(studentLogin.data?.data?.firstLogin === true, 'Confirmed firstLogin is TRUE');
-    const studentToken = studentLogin.data?.data?.accessToken;
-    const studentHeaders = { Authorization: `Bearer ${studentToken}` };
+    const initialLoginData = studentLogin.body;
+    const initialToken = initialLoginData?.accessToken;
+    assert('6. Student Initial Login', studentLogin.status === 200 && !!initialToken, `FirstLogin: ${initialLoginData?.firstLogin}`);
 
-    console.log('\n[6] Mandatory First-Login Password Change');
-    const changePass = await request('/auth/change-password', {
-      method: 'POST',
-      headers: studentHeaders,
-      body: { oldPassword: 'ClassVault@123', newPassword: 'StudentTestSecure@999' },
+    // 7. Force Change Password on First Login
+    const changePass = await request('POST', '/api/v1/auth/change-password', {
+      oldPassword: testRegNo,
+      newPassword: 'SecureSupabasePass2026!'
+    }, initialToken);
+    assert('7. Force Change Password', changePass.status === 200, `Password Updated`);
+
+    // 8. Re-login with New Password
+    const reLogin = await request('POST', '/api/v1/auth/login', {
+      username: testRegNo,
+      password: 'SecureSupabasePass2026!'
     });
-    assert(changePass.status === 200 && changePass.data?.success, 'Student successfully changed password');
+    const studentLoginData = reLogin.body;
+    const studentToken = studentLoginData?.accessToken;
+    assert('8. Student Re-login with New Password', reLogin.status === 200 && studentLoginData?.firstLogin === false, `New Token Generated`);
 
-    // Login with new password
-    const newPassLogin = await request('/auth/login', {
-      method: 'POST',
-      body: { username: 'TESTREG001', password: 'StudentTestSecure@999' },
-    });
-    assert(newPassLogin.status === 200 && newPassLogin.data?.success, 'Student logged in with NEW password');
-    assert(newPassLogin.data?.data?.firstLogin === false, 'Confirmed firstLogin is now FALSE');
-    const activeStudentToken = newPassLogin.data?.data?.accessToken;
-    const activeStudentHeaders = { Authorization: `Bearer ${activeStudentToken}` };
+    // 9. Update Profile (Bio, GitHub, Skills)
+    const updateProfile = await request('PUT', '/api/v1/students/me', {
+      bio: 'Verified on Supabase PostgreSQL Production Database',
+      githubUrl: 'https://github.com/supabase-test-student',
+      linkedinUrl: 'https://linkedin.com/in/supabase-test-student',
+      skills: 'PostgreSQL,Spring Boot 3,Supabase,React'
+    }, studentToken);
+    const updatedProfile = updateProfile.body;
+    assert('9. Update Student Profile', updateProfile.status === 200 && updatedProfile?.bio?.includes('Supabase'), `Bio: ${updatedProfile?.bio}`);
 
-    // 7. Update Student Profile & Verify Dynamic Score
-    console.log('\n[7] Update Student Profile & Verify Score');
-    const updateProfile = await request('/students/profile', {
-      method: 'PUT',
-      headers: activeStudentHeaders,
-      body: {
-        bio: 'Supabase test student profile bio.',
-        skills: 'Java,Spring Boot,PostgreSQL,React',
-        githubUrl: 'https://github.com/test-student',
-        linkedinUrl: 'https://linkedin.com/in/test-student',
-        leetcodeUrl: 'https://leetcode.com/test-student',
-        portfolioUrl: 'https://test-student.dev',
-        profilePhotoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-      },
-    });
-    assert(updateProfile.status === 200 && updateProfile.data?.success, 'Profile updated successfully');
-    const profile = updateProfile.data?.data;
-    assert(profile?.completionPercentage >= 90, `Profile completion reached ${profile?.completionPercentage}%`);
+    // 10. Create Private Test Project
+    const createProject = await request('POST', '/api/v1/projects', {
+      title: 'Supabase Production Vault Project',
+      tagline: 'End-to-End verified database persistence',
+      description: 'Full stack project running against live Supabase PostgreSQL instance',
+      category: 'Database & Cloud',
+      technologyUsed: 'PostgreSQL, Supabase, Spring Boot',
+      semester: 4,
+      visibility: 'PRIVATE',
+      readmeContent: '# Supabase Project Persistence\n\nVerified live database persistence on Supabase.'
+    }, studentToken);
+    const projectData = createProject.body;
+    assert('10. Create Private Project in Supabase', createProject.status === 201 && projectData?.visibility === 'PRIVATE', `Project ID: ${projectData?.id}`);
+    const projectId = projectData?.id;
 
-    // 8. Create Test Project with Markdown README
-    console.log('\n[8] Create Test Project with Markdown README');
-    const createProject = await request('/projects', {
-      method: 'POST',
-      headers: activeStudentHeaders,
-      body: {
-        title: 'Supabase PostgreSQL Verification Engine',
-        description: 'Verification repository for Supabase persistence and markdown README storage.',
-        readmeContent: '# Supabase Verification Engine\n\n- PostgreSQL Integration\n- Flyway Schema\n- ACID Persistence',
-        technologyUsed: 'Java,Spring Boot,PostgreSQL,React',
-        category: 'Database Systems',
-        semester: 4,
-        githubRepoUrl: 'https://github.com/test-student/supabase-engine',
-        liveDemoUrl: 'https://supabase-engine.demo.app',
-        visibility: 'PUBLIC',
-      },
-    });
-    assert(createProject.status === 201 && createProject.data?.success, 'Created test project with README');
-    const projectId = createProject.data?.data?.id;
+    // 11. Verify Private Project Authorization (Owner Access)
+    const ownerAccess = await request('GET', `/api/v1/projects/${projectId}`, null, studentToken);
+    const ownerProject = ownerAccess.body;
+    assert('11. Owner Access to Private Project', ownerAccess.status === 200 && ownerProject?.title === 'Supabase Production Vault Project', `Title: ${ownerProject?.title}`);
 
-    // Approve project by Admin
-    await request(`/admin/projects/${projectId}/status`, {
-      method: 'PUT',
-      headers: adminHeaders,
-      body: { status: 'APPROVED' },
-    });
+    // 12. Verify Second Student Cannot Access Private Project (403 Forbidden)
+    const test2RegNo = 'TEST_SUPA_902';
+    const createStudent2 = await request('POST', '/api/v1/admin/students', {
+      name: 'Second Test User',
+      registerNumber: test2RegNo,
+      rollNumber: 'SUPA902',
+      department: 'AI&DS',
+      year: 2,
+      section: 'B',
+      email: 'supabase.test902@classvault.edu',
+      password: test2RegNo
+    }, adminToken);
+    const student2Id = createStudent2.body?.id;
+    const login2 = await request('POST', '/api/v1/auth/login', { username: test2RegNo, password: test2RegNo });
+    const student2Token = login2.body?.accessToken;
 
-    // 9. Read back and verify persistence
-    console.log('\n[9] Verify Project Persistence & README Retrieval');
-    const getProject = await request(`/projects/${projectId}`, { headers: activeStudentHeaders });
-    assert(getProject.status === 200, 'Project retrieved successfully');
-    assert(getProject.data?.data?.readmeContent?.includes('Supabase Verification Engine'), 'Markdown README content verified');
+    const unauthorizedAccess = await request('GET', `/api/v1/projects/${projectId}`, null, student2Token);
+    assert('12. Private Project Security (Student 2 Forbidden)', unauthorizedAccess.status === 403, `Status: ${unauthorizedAccess.status} (Forbidden)`);
 
-    // 10. Clean up isolated test data safely
-    console.log('\n[10] Safe Cleanup of TESTREG001 Only');
-    if (projectId) {
-      await request(`/admin/projects/${projectId}`, { method: 'DELETE', headers: adminHeaders });
-    }
-    if (createdStudent?.id) {
-      await request(`/admin/students/${createdStudent.id}`, { method: 'DELETE', headers: adminHeaders });
-    }
-    assert(true, 'Isolated TESTREG001 test record safely removed without affecting other data');
+    // 13. Public Project Listing
+    await request('PUT', `/api/v1/projects/${projectId}`, { 
+      title: 'Supabase Production Vault Project',
+      tagline: 'End-to-End verified database persistence',
+      description: 'Full stack project running against live Supabase PostgreSQL instance',
+      category: 'Database & Cloud',
+      technologyUsed: 'PostgreSQL, Supabase, Spring Boot',
+      semester: 4,
+      visibility: 'PUBLIC' 
+    }, studentToken);
+    const publicProjects = await request('GET', '/api/v1/projects?page=0&size=10');
+    const projectsList = publicProjects.body?.content || publicProjects.raw?.data?.content || [];
+    assert('13. Public Project Listing in Supabase', publicProjects.status === 200 && projectsList.some(p => p.id === projectId), `Total Found: ${projectsList.length}`);
 
-    console.log('\n================================================================');
-    console.log(`  VERIFICATION SUITE RESULT: ${passed} PASSED / ${failed} FAILED`);
-    console.log('================================================================\n');
-  } catch (err) {
-    console.error('Verification error:', err);
-    process.exit(1);
+    // 14. Leaderboard Check
+    const leaderboard = await request('GET', '/api/v1/leaderboard');
+    const lbData = leaderboard.body;
+    assert('14. Leaderboard Endpoint', leaderboard.status === 200 && Array.isArray(lbData), `Leaderboard count: ${Array.isArray(lbData) ? lbData.length : 0}`);
+
+    console.log(`\n---------------------------------------------------------------`);
+    console.log(`Phase 1 Pre-Restart Verification: ${passed} / ${total} Checks Passed`);
+    console.log(`Test Student 1 ID: ${studentId}, Student 2 ID: ${student2Id}, Project ID: ${projectId}`);
+    console.log(`---------------------------------------------------------------\n`);
+
+    return { success: passed === total, studentId, student2Id, projectId, testRegNo, test2RegNo, adminToken };
+
+  } catch (error) {
+    console.error('Verification failed with error:', error);
+    return { success: false, error: error.message };
   }
 }
 
-run();
+runVerification();

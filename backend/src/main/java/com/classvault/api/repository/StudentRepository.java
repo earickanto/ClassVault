@@ -32,12 +32,12 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     org.springframework.data.domain.Page<Student> searchStudents(@Param("query") String query, org.springframework.data.domain.Pageable pageable);
 
     @Query("SELECT s FROM Student s WHERE " +
-           "(:query IS NULL OR :query = '' OR " +
+           "((:query IS NULL OR :query = '') OR (" +
            "LOWER(s.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(s.rollNumber) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(s.registerNumber) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(s.department) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(s.email) LIKE LOWER(CONCAT('%', :query, '%'))) AND " +
+           "(s.rollNumber IS NOT NULL AND LOWER(s.rollNumber) LIKE LOWER(CONCAT('%', :query, '%'))) OR " +
+           "(s.registerNumber IS NOT NULL AND LOWER(s.registerNumber) LIKE LOWER(CONCAT('%', :query, '%'))) OR " +
+           "(s.department IS NOT NULL AND LOWER(s.department) LIKE LOWER(CONCAT('%', :query, '%'))) OR " +
+           "(s.email IS NOT NULL AND LOWER(s.email) LIKE LOWER(CONCAT('%', :query, '%'))))) AND " +
            "(:department IS NULL OR :department = '' OR LOWER(s.department) = LOWER(:department)) AND " +
            "(:year IS NULL OR s.year = :year) AND " +
            "(:section IS NULL OR :section = '' OR LOWER(s.section) = LOWER(:section))")

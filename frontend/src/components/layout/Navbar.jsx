@@ -39,7 +39,7 @@ export const Navbar = ({ onOpenMobileMenu }) => {
         {/* Right Side: Theme Toggle, Notifications, User Profile */}
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
-          {user && <NotificationDropdown />}
+          {user && user.role !== 'ROLE_ADMIN' && <NotificationDropdown />}
 
           {user && (
             <div className="flex items-center gap-3 pl-2 sm:pl-4 border-l border-slate-200 dark:border-slate-800">
