@@ -4,12 +4,15 @@ import com.classvault.api.dto.ApiResponse;
 import com.classvault.api.security.JwtAuthenticationEntryPoint;
 import com.classvault.api.security.JwtAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -58,6 +61,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            .cors(Customizer.withDefaults())
             .csrf(AbstractHttpConfigurer::disable)
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint(unauthorizedHandler)
@@ -65,10 +69,16 @@ public class SecurityConfig {
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Allow error and forward dispatcher types
+                .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR).permitAll()
+                // Permit Spring Boot Actuator health and info endpoints
+                .requestMatchers(EndpointRequest.to("health", "info")).permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator").permitAll()
+                // Permit Public API endpoints
                 .requestMatchers("/api/v1/auth/**").permitAll()
-                .requestMatchers("/api/v1/health").permitAll()
+                .requestMatchers("/api/v1/health", "/api/v1/health/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
+                // Require authentication for all other endpoints
                 .anyRequest().authenticated()
             );
 
@@ -77,3 +87,4 @@ public class SecurityConfig {
         return http.build();
     }
 }
+

@@ -1,0 +1,23 @@
+services:
+  # ClassVault Spring Boot Backend Web Service on Render
+  - type: web
+    name: classvault-backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    region: singapore # or oregon / frankfurt / ohio
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        sync: false # Set via Render Dashboard from private Supabase credentials
+      - key: DATABASE_USERNAME
+        sync: false # Set via Render Dashboard
+      - key: DATABASE_PASSWORD
+        sync: false # Set via Render Dashboard
+      - key: JWT_SECRET
+        sync: false # Set via Render Dashboard
+      - key: CORS_ALLOWED_ORIGINS
+        value: "http://localhost:5173,https://*.vercel.app,https://*.onrender.com,https://*.netlify.app"
