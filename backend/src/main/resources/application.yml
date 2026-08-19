@@ -1,0 +1,41 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+spring:
+  application:
+    name: classvault-api
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 120MB
+      enabled: true
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET:${APPLICATION_SECURITY_JWT_SECRET_KEY:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}}
+      access-token-expiration-ms: 3600000 # 60 minutes
+      refresh-token-expiration-ms: 604800000 # 7 days
+  upload:
+    dir: uploads

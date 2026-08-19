@@ -1,0 +1,8 @@
+name,register_number,roll_number,department,year,section
+Test Unique Student,REG202694261,26IT94261,Information Technology,3,B
+Duplicate Aarav Reg,REG2026001,26IT003,Information Technology,3,B
+Duplicate Aarav Roll,REG2026032,26AI001,Information Technology,3,B
+Missing Roll,REG2026033,,Information Technology,3,B
+Missing Name,,26IT004,Information Technology,3,B
+Invalid Year,REG2026034,26IT005,Information Technology,99,B
+In Batch Duplicate,REG202694261,26IT999,Information Technology,3,B
